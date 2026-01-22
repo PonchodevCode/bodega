@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Bodega</title>
+    <script>
+        // Redirigir según autenticación
+        function checkAuth() {
+            const token = localStorage.getItem('authToken');
+            const usuario = localStorage.getItem('usuario');
+            
+            if (token && usuario) {
+                // Verificar si el token es válido haciendo una petición al servidor
+                fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Token válido, redirigir al sistema
+                        window.location.href = '/dashboard.html';
+                    } else {
+                        // Token inválido, redirigir al login
+                        localStorage.removeItem('authToken');
+                        localStorage.removeItem('usuario');
+                        window.location.href = '/login.html';
+                    }
+                })
+                .catch(error => {
+                    // Error de conexión, asumir que necesita login
+                    console.log('Error verificando token:', error);
+                    window.location.href = '/login.html';
+                });
+            } else {
+                // No hay token, redirigir al login
+                window.location.href = '/login.html';
+            }
+        }
+        
+        // Ejecutar al cargar la página
+        checkAuth();
+    </script>
+</head>
+<body>
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; background: #f8f9fa;">
+        <div style="text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">⚙️</div>
+            <h2>Sistema de Bodega</h2>
+            <p>Verificando autenticación...</p>
+        </div>
+    </div>
+</body>
+</html>

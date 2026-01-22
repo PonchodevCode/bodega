@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema de Bodega</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0b3d91 0%, #0b66b2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            max-width: 400px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+        
+        .login-header {
+            background: linear-gradient(135deg, #0b3d91 0%, #0b66b2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .login-header i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+        
+        .login-body {
+            padding: 40px 30px;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <i class="fas fa-tools"></i>
+            <h2 class="mb-0">Sistema de Bodega</h2>
+            <p class="mb-0 mt-2 opacity-75">Control de Herramientas</p>
+        </div>
+        
+        <div class="login-body">
+            <div id="login-alert" class="alert alert-danger" style="display: none;">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="error-message"></span>
+            </div>
+            
+            <div id="success-alert" class="alert alert-success" style="display: none;">
+                <i class="fas fa-check-circle me-2"></i>
+                <span id="success-message"></span>
+            </div>
+            
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="username" class="form-label">Usuario</label>
+                    <input type="text" class="form-control" id="username" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="password" class="form-label">Contraseña</label>
+                    <input type="password" class="form-control" id="password" required>
+                </div>
+                
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-sign-in-alt me-2"></i>Iniciar Sesión
+                    </button>
+                </div>
+            </form>
+            
+            <!-- <div class="mt-4 text-center small text-muted">
+                <p>Usuarios de prueba:</p>
+                <p><strong>admin</strong> / temporal123 (Admin)</p>
+                <p><strong>juan.garcia</strong> / temporal123 (Usuario)</p>
+                <p><strong>maria.rodriguez</strong> / temporal123 (Supervisor)</p>
+            </div> -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class LoginSystem {
+            constructor() {
+                this.init();
+            }
+
+            init() {
+                document.getElementById('loginForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.login();
+                });
+            }
+
+            async login() {
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+                
+                if (!username || !password) {
+                    this.showError('Por favor, completa todos los campos');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            username: username,
+                            password: password
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        console.log('Login exitoso:', data);
+                        
+                        localStorage.setItem('authToken', data.token);
+                        localStorage.setItem('usuario', JSON.stringify(data.usuario));
+                        
+                        this.showSuccess('¡Inicio de sesión exitoso! Redirigiendo...');
+                        
+                        setTimeout(() => {
+                            window.location.href = '/dashboard.html';
+                        }, 1500);
+                        
+                    } else {
+                        this.showError(data.error || 'Error al iniciar sesión');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error en login:', error);
+                    this.showError('Error de conexión. Intenta nuevamente.');
+                }
+            }
+
+            showError(message) {
+                const alertElement = document.getElementById('login-alert');
+                const messageElement = document.getElementById('error-message');
+                
+                messageElement.textContent = message;
+                alertElement.style.display = 'block';
+                
+                setTimeout(() => {
+                    alertElement.style.display = 'none';
+                }, 5000);
+            }
+
+            showSuccess(message) {
+                const alertElement = document.getElementById('success-alert');
+                const messageElement = document.getElementById('success-message');
+                
+                messageElement.textContent = message;
+                alertElement.style.display = 'block';
+                
+                setTimeout(() => {
+                    alertElement.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        new LoginSystem();
+    </script>
+</body>
+</html>

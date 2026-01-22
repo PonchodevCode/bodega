@@ -1,0 +1,40 @@
+## Node
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-lock.yaml
+package-lock.json
+
+## Python venv
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+
+## Databases and backups
+database/*.db
+backups/
+
+## Logs and temp
+*.log
+tmp/
+temp/
+
+## IDEs and OS
+.DS_Store
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+## Build artifacts
+dist/
+build/
+
+## Mac specific
+._*
+
+## Editor swap
+*~
+

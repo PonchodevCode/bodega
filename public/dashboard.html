@@ -41,6 +41,8 @@
             flex-shrink: 0;
             overflow-y: auto;
             transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
         }
 
         .sidebar-header {
@@ -64,6 +66,24 @@
 
         .sidebar .nav {
             padding: 1rem 0;
+            flex: 1 1 auto;
+        }
+
+        .sidebar-footer {
+            padding: 12px;
+            flex-shrink: 0;
+            margin-top: auto;
+        }
+
+        .sidebar-footer .btn {
+            width: calc(100% - 24px);
+            margin: 0 12px;
+            padding: 6px 10px;
+            font-size: 0.95rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .sidebar .nav-link {
@@ -359,6 +379,11 @@
                         <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
                     </a>
                 </li>
+                <li class="nav-item sidebar-footer">
+                    <button id="backup-btn" class="btn btn-outline-light btn-sm" title="Crear backup de la base de datos">
+                        <i class="fas fa-database me-2"></i> Backup
+                    </button>
+                </li>
             </ul>
         </nav>
 
@@ -651,13 +676,57 @@
                     <div id="registro-page" class="page-content d-none fade-in">
                         <div class="page-header">
                             <h1 class="h2"><i class="fas fa-user-plus me-2"></i>Registro de Usuarios</h1>
-                            <p class="mb-0">Registrar nuevos solicitantes en el sistema</p>
+                            <p class="mb-0">Registrar nuevos usuarios en el sistema</p>
                         </div>
 
-                        <div class="row justify-content-center">
-                            <div class="col-md-8 col-lg-6">
-                                <div class="card">
-                                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <button class="btn btn-primary" id="open-registro-modal">
+                                        <i class="fas fa-user-plus me-2"></i> Nuevo Usuario
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Solicitantes management -->
+                        <div id="solicitantes-admin-container" class="card mt-4">
+                            <div class="card-body">
+                                <h5 class="card-title">Solicitantes</h5>
+                                <div class="mb-3">
+                                    <button class="btn btn-outline-primary" id="open-solicitante-modal">
+                                        <i class="fas fa-user-plus me-2"></i> Nuevo Solicitante
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover" id="solicitantes-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Nombre</th>
+                                                <th>Departamento</th>
+                                                <th>Teléfono</th>
+                                                <th>Email</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Se llenará dinámicamente -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal Registro de Usuario -->
+                        <div class="modal fade" id="registroModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Nuevo Usuario</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
                                         <form id="registroForm">
                                             <div class="mb-3">
                                                 <label for="reg-nombre" class="form-label">Nombre Completo</label>
@@ -697,12 +766,13 @@
                                                 <label for="reg-password-confirm" class="form-label">Confirmar Contraseña</label>
                                                 <input type="password" class="form-control" id="reg-password-confirm" required>
                                             </div>
-                                            <div class="d-grid">
-                                                <button type="button" class="btn btn-primary" id="guardar-registro">
-                                                    <i class="fas fa-user-plus me-2"></i>Registrarse
-                                                </button>
-                                            </div>
                                         </form>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" id="guardar-registro">
+                                            <i class="fas fa-user-plus me-2"></i>Registrarse
+                                        </button>
                                     </div>
                                 </div>
                             </div>

@@ -271,6 +271,23 @@ class HerramientasApp {
         document.getElementById('guardar-prestamo')?.addEventListener('click', () => this.savePrestamo());
         document.getElementById('guardar-devolucion')?.addEventListener('click', () => this.saveDevolucion());
         document.getElementById('guardar-registro')?.addEventListener('click', () => this.saveRegistro());
+        // Abrir modal de registro
+        document.getElementById('open-registro-modal')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const modalEl = document.getElementById('registroModal');
+            if (modalEl) new bootstrap.Modal(modalEl).show();
+        });
+
+        // Abrir modal de creación de solicitante desde Registro
+        document.getElementById('open-solicitante-modal')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.openCreateSolicitanteModal();
+        });
+        // Abrir modal de backups
+        document.getElementById('backup-btn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.openBackupModal();
+        });
 
         // Search
         document.getElementById('buscar-herramienta')?.addEventListener('input', (e) => {
@@ -417,10 +434,65 @@ class HerramientasApp {
 
     async loadRegistroData() {
         try {
+            // Solo los admins deben ver/consultar la lista de usuarios
+            if (!this.usuario || this.usuario.rol !== 'admin') {
+                // Eliminar contenedor si existe
+                const existing = document.getElementById('usuarios-admin-container');
+                if (existing) existing.remove();
+                return;
+            }
+
             const usuarios = await this.apiCall('/api/usuarios');
             this.renderUsuariosTable(usuarios);
+            // Cargar solicitantes también para administración (admins y supervisors)
+            await this.loadSolicitantesAdmin();
         } catch (error) {
             console.error('Error loading usuarios:', error);
+        }
+    }
+
+    async loadSolicitantesAdmin() {
+        try {
+            const solicitantes = await this.apiCall('/api/solicitantes');
+            this.renderSolicitantesTable(solicitantes);
+        } catch (error) {
+            console.error('Error loading solicitantes:', error);
+        }
+    }
+
+    renderSolicitantesTable(items) {
+        const tbody = document.querySelector('#solicitantes-table tbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = items.map(s => `
+            <tr>
+                <td>${s.id}</td>
+                <td>${s.nombre}</td>
+                <td>${s.departamento}</td>
+                <td>${s.telefono || ''}</td>
+                <td>${s.email || ''}</td>
+                <td>
+                    ${ (this.usuario && (this.usuario.rol === 'admin' || this.usuario.rol === 'supervisor')) ? `
+                        <button class="btn btn-sm btn-outline-danger" onclick="app.deleteSolicitante(${s.id})" title="Eliminar solicitante" data-bs-toggle="tooltip" data-bs-placement="top">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : `<span class="text-muted small">No autorizado</span>`}
+                </td>
+            </tr>
+        `).join('');
+        this.initTooltips();
+    }
+
+    async deleteSolicitante(id) {
+        if (!confirm('¿Eliminar solicitante? Esta acción no se puede deshacer.')) return;
+        try {
+            await this.apiCall(`/api/solicitantes/${id}`, 'DELETE');
+            this.showAlert('Solicitante eliminado', 'success');
+            await this.loadSolicitantesAdmin();
+            await this.loadPrestamosData();
+        } catch (error) {
+            console.error('Error eliminando solicitante:', error);
+            this.showAlert('Error al eliminar solicitante: ' + error.message, 'error');
         }
     }
 
@@ -469,9 +541,16 @@ class HerramientasApp {
                 <td>${u.departamento || ''}</td>
                 <td>${u.rol || ''}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-danger" onclick="app.deleteUsuario(${u.id})" title="Eliminar usuario" data-bs-toggle="tooltip" data-bs-placement="top">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    ${this.usuario && this.usuario.rol === 'admin' ? `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="app.editUsuario(${u.id})" title="Editar usuario" data-bs-toggle="tooltip" data-bs-placement="top">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="app.deleteUsuario(${u.id})" title="Eliminar usuario" data-bs-toggle="tooltip" data-bs-placement="top">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : `
+                        <span class="text-muted small">No autorizado</span>
+                    `}
                 </td>
             </tr>
         `).join('');
@@ -487,6 +566,88 @@ class HerramientasApp {
         } catch (error) {
             console.error('Error eliminando usuario:', error);
             this.showAlert('Error al eliminar usuario: ' + error.message, 'error');
+        }
+    }
+
+    async editUsuario(usuarioId) {
+        try {
+            const usuario = await this.apiCall(`/api/usuarios/${usuarioId}`);
+            // Crear modal de edición
+            const modalHtml = `
+                <div class="modal fade" id="editUsuarioModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Editar Usuario</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="editUsuarioForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Nombre completo</label>
+                                        <input type="text" class="form-control" id="edit-nombre-completo" value="${usuario.nombre_completo || ''}" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" class="form-control" id="edit-email" value="${usuario.email || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Departamento</label>
+                                        <input type="text" class="form-control" id="edit-departamento" value="${usuario.departamento || ''}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Rol</label>
+                                        <select class="form-select" id="edit-rol">
+                                            <option value="usuario" ${usuario.rol === 'usuario' ? 'selected' : ''}>usuario</option>
+                                            <option value="supervisor" ${usuario.rol === 'supervisor' ? 'selected' : ''}>supervisor</option>
+                                            <option value="admin" ${usuario.rol === 'admin' ? 'selected' : ''}>admin</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3 form-check">
+                                        <input class="form-check-input" type="checkbox" id="edit-activo" ${usuario.activo ? 'checked' : ''}>
+                                        <label class="form-check-label" for="edit-activo">Activo</label>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="button" class="btn btn-primary" id="save-edit-usuario">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modalEl = document.getElementById('editUsuarioModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+
+            document.getElementById('save-edit-usuario').addEventListener('click', async () => {
+                const nombre_completo = document.getElementById('edit-nombre-completo').value.trim();
+                const email = document.getElementById('edit-email').value.trim();
+                const departamento = document.getElementById('edit-departamento').value.trim();
+                const rol = document.getElementById('edit-rol').value;
+                const activo = document.getElementById('edit-activo').checked ? 1 : 0;
+
+                try {
+                    await this.apiCall(`/api/usuarios/${usuarioId}`, 'PUT', { nombre_completo, email, departamento, rol, activo });
+                    this.showAlert('Usuario actualizado', 'success');
+                    modal.hide();
+                    modalEl.remove();
+                    await this.loadRegistroData();
+                } catch (error) {
+                    console.error('Error actualizando usuario:', error);
+                    this.showAlert('Error al actualizar usuario: ' + error.message, 'error');
+                }
+            }, { once: true });
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                modalEl.remove();
+            }, { once: true });
+        } catch (error) {
+            console.error('Error cargando usuario:', error);
+            this.showAlert('Error al cargar usuario: ' + error.message, 'error');
         }
     }
 
@@ -916,6 +1077,105 @@ class HerramientasApp {
         modalEl.addEventListener('hidden.bs.modal', () => {
             modalEl.remove();
         }, { once: true });
+    }
+
+    async openBackupModal() {
+        try {
+            const modalHtml = `
+                <div class="modal fade" id="backupModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Backups de la base de datos</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="d-flex mb-3">
+                                    <button class="btn btn-primary me-2" id="create-backup-btn"><i class="fas fa-database me-2"></i>Crear backup</button>
+                                    <div id="backup-status" class="align-self-center"></div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover" id="backups-list-table">
+                                        <thead class="table-light">
+                                            <tr><th>Archivo</th><th>Tamaño</th><th>Modificado</th><th>Acciones</th></tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modalEl = document.getElementById('backupModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+
+            const tbody = modalEl.querySelector('#backups-list-table tbody');
+
+            const loadList = async () => {
+                try {
+                    const list = await this.apiCall('/backups');
+                    tbody.innerHTML = list.map(b => `
+                        <tr>
+                            <td>${b.file}</td>
+                            <td>${(b.size/1024).toFixed(1)} KB</td>
+                            <td>${new Date(b.mtime).toLocaleString()}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-success me-1" data-file="${b.file}" data-action="restore">Restaurar</button>
+                                <a class="btn btn-sm btn-outline-secondary" href="/backups/${b.file}" download>Descargar</a>
+                            </td>
+                        </tr>
+                    `).join('');
+                    this.initTooltips();
+                } catch (err) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-danger">Error cargando backups</td></tr>';
+                    console.error('Error listando backups:', err);
+                }
+            };
+
+            modalEl.querySelector('#create-backup-btn').addEventListener('click', async () => {
+                try {
+                    modalEl.querySelector('#backup-status').textContent = 'Creando...';
+                    await this.apiCall('/backup', 'POST');
+                    modalEl.querySelector('#backup-status').textContent = 'Backup creado';
+                    await loadList();
+                    setTimeout(() => modalEl.querySelector('#backup-status').textContent = '', 2000);
+                } catch (err) {
+                    modalEl.querySelector('#backup-status').textContent = 'Error';
+                    console.error('Error creando backup:', err);
+                }
+            });
+
+            modalEl.addEventListener('click', async (e) => {
+                const btn = e.target.closest('button[data-action="restore"]');
+                if (!btn) return;
+                const filename = btn.getAttribute('data-file');
+                if (!confirm(`Restaurar backup ${filename}? Esto reemplazará la base de datos actual.`)) return;
+                try {
+                    await this.apiCall('/restore', 'POST', { filename });
+                    this.showAlert('Backup restaurado. El servidor reiniciará la conexión.', 'success');
+                    await loadList();
+                } catch (err) {
+                    console.error('Error restaurando backup:', err);
+                    this.showAlert('Error al restaurar backup: ' + err.message, 'error');
+                }
+            });
+
+            await loadList();
+
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                modalEl.remove();
+            }, { once: true });
+        } catch (err) {
+            console.error('openBackupModal error:', err);
+            this.showAlert('Error abriendo modal backups: ' + err.message, 'error');
+        }
     }
 
     updateSelectOptionsConDatos(selectId, items, valueField, textField, dataField) {

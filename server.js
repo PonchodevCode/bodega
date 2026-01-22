@@ -16,7 +16,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a la base de datos
-const db = new sqlite3.Database('./database/herramientas.db', (err) => {
+let db = new sqlite3.Database('./database/herramientas.db', (err) => {
     if (err) {
         console.error('Error al conectar con la base de datos:', err.message);
     } else {
@@ -33,7 +33,7 @@ app.use((req, res, next) => {
 });
 
 // Inicializar sistema de autenticación
-const auth = new AuthMiddleware(db);
+let auth = new AuthMiddleware(db);
 
 // Inicializar tablas de autenticación
 function initializeAuthTables() {
@@ -41,12 +41,45 @@ function initializeAuthTables() {
     const authSchemaPath = path.join(__dirname, 'database/auth_schema.sql');
     
     if (fs.existsSync(authSchemaPath)) {
-        const authSchema = fs.readFileSync(authSchemaPath, 'utf8');
-        db.exec(authSchema, (err) => {
+        // Sólo ejecutar los inserts de usuarios si la tabla usuarios no existe o está vacía.
+        db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'", [], (err, tableRow) => {
             if (err) {
-                console.error('Error inicializando tablas de autenticación:', err.message);
+                console.error('Error comprobando tabla usuarios:', err.message);
+                return;
+            }
+
+            const authSchema = fs.readFileSync(authSchemaPath, 'utf8');
+
+            if (!tableRow) {
+                // Tabla no existe: ejecutar todo el script (crea tabla + inserts)
+                db.exec(authSchema, (err2) => {
+                    if (err2) {
+                        console.error('Error inicializando tablas de autenticación:', err2.message);
+                    } else {
+                        console.log('Tablas de autenticación inicializadas correctamente (creadas)');
+                    }
+                });
             } else {
-                console.log('Tablas de autenticación inicializadas correctamente');
+                // Tabla existe: comprobar si tiene filas
+                db.get('SELECT COUNT(*) as count FROM usuarios', [], (err3, countRow) => {
+                    if (err3) {
+                        console.error('Error contando usuarios:', err3.message);
+                        return;
+                    }
+
+                    if (countRow && countRow.count === 0) {
+                        // Ejecutar el script para insertar usuarios por defecto
+                        db.exec(authSchema, (err4) => {
+                            if (err4) {
+                                console.error('Error insertando usuarios por defecto:', err4.message);
+                            } else {
+                                console.log('Usuarios por defecto insertados');
+                            }
+                        });
+                    } else {
+                        console.log('Tabla usuarios ya contiene datos, no se insertan usuarios por defecto');
+                    }
+                });
             }
         });
     }
@@ -305,6 +338,63 @@ app.post('/backup', auth.authenticate(), auth.authorize(['admin','supervisor']),
     }
 });
 
+// Listar backups disponibles (admin)
+app.get('/backups', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    fs.readdir(backupsDir, (err, files) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        const backups = files
+            .filter(f => f.endsWith('.db'))
+            .map(f => {
+                const stat = fs.statSync(path.join(backupsDir, f));
+                return { file: f, size: stat.size, mtime: stat.mtime };
+            })
+            .sort((a,b) => b.mtime - a.mtime);
+        res.json(backups);
+    });
+});
+
+// Restaurar backup (admin) - recibe { filename }
+app.post('/restore', auth.authenticate(), auth.authorize(['admin']), (req, res) => {
+    try {
+        const { filename } = req.body;
+        if (!filename) return res.status(400).json({ error: 'filename requerido' });
+        const src = path.join(backupsDir, filename);
+        if (!fs.existsSync(src)) return res.status(404).json({ error: 'Backup no encontrado' });
+
+        // Cerrar conexión actual
+        db.close((closeErr) => {
+            if (closeErr) {
+                console.error('Error cerrando DB antes de restore:', closeErr);
+                return res.status(500).json({ error: closeErr.message });
+            }
+
+            const dest = path.join(__dirname, 'database', 'herramientas.db');
+            fs.copyFile(src, dest, (copyErr) => {
+                if (copyErr) {
+                    console.error('Error copiando backup:', copyErr);
+                    return res.status(500).json({ error: copyErr.message });
+                }
+
+                // Reabrir DB
+                db = new sqlite3.Database(dest, (openErr) => {
+                    if (openErr) {
+                        console.error('Error reabriendo DB tras restore:', openErr);
+                        return res.status(500).json({ error: openErr.message });
+                    }
+                    // Recreate auth middleware with new db
+                    auth = new AuthMiddleware(db);
+                    console.log('Backup restaurado y DB reabierta desde', filename);
+                    res.json({ message: 'Backup restaurado correctamente' });
+                });
+            });
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Programar backup automático cada 24 horas (86400000 ms)
 const BACKUP_INTERVAL_MS = process.env.BACKUP_INTERVAL_MS ? parseInt(process.env.BACKUP_INTERVAL_MS,10) : 24 * 60 * 60 * 1000;
 setInterval(() => {
@@ -545,6 +635,35 @@ app.post('/api/solicitantes', auth.authenticate(), (req, res) => {
         res.json({ 
             id: this.lastID, 
             message: 'Solicitante creado exitosamente' 
+        });
+    });
+});
+
+// Eliminar solicitante (evitar si tiene préstamos)
+app.delete('/api/solicitantes/:id', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { id } = req.params;
+    console.log(`DELETE /api/solicitantes/${id} requested by user:`, req.usuario?.id);
+    // Verificar si existen préstamos activos asociados (solo bloquea si hay préstamos en estado 'Activo')
+    const checkQuery = 'SELECT COUNT(*) as count FROM prestamos WHERE solicitante_id = ? AND estado = "Activo"';
+    req.db.get(checkQuery, [id], (err, row) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (row && row.count > 0) {
+            return res.status(400).json({ error: 'No se puede eliminar: solicitante con préstamos activos' });
+        }
+
+        const delQuery = 'DELETE FROM solicitantes WHERE id = ?';
+        req.db.run(delQuery, [id], function(err2) {
+            if (err2) {
+                res.status(500).json({ error: err2.message });
+                return;
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ error: 'Solicitante no encontrado' });
+            }
+            res.json({ message: 'Solicitante eliminado exitosamente' });
         });
     });
 });
@@ -825,10 +944,28 @@ app.get('/api/usuarios', auth.authenticate(), auth.authorize(['admin']), (req, r
     });
 });
 
+// Obtener usuario por ID (admin)
+app.get('/api/usuarios/:id', auth.authenticate(), auth.authorize(['admin']), (req, res) => {
+    const { id } = req.params;
+    console.log(`GET /api/usuarios/${id} requested by user:`, req.usuario?.id);
+    const query = 'SELECT id, nombre_usuario, email, nombre_completo, departamento, rol, activo, fecha_creacion FROM usuarios WHERE id = ?';
+    req.db.get(query, [id], (err, row) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (!row) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        res.json(row);
+    });
+});
+
 // Eliminar usuario (admin) - no permitir eliminarse a sí mismo
 app.delete('/api/usuarios/:id', auth.authenticate(), auth.authorize(['admin']), async (req, res) => {
     try {
         const { id } = req.params;
+        console.log(`DELETE /api/usuarios/${id} requested by user:`, req.usuario?.id);
         if (req.usuario && req.usuario.id.toString() === id.toString()) {
             return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
         }
@@ -847,6 +984,34 @@ app.delete('/api/usuarios/:id', auth.authenticate(), auth.authorize(['admin']), 
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Actualizar usuario (admin)
+app.put('/api/usuarios/:id', auth.authenticate(), auth.authorize(['admin']), (req, res) => {
+    const { id } = req.params;
+    const { nombre_completo, email, departamento, rol, activo } = req.body;
+
+    // No permitir que un admin se quite sus propios privilegios a sí mismo
+    if (req.usuario && req.usuario.id.toString() === id.toString() && rol && rol !== req.usuario.rol) {
+        return res.status(400).json({ error: 'No puedes cambiar tu propio rol' });
+    }
+
+    const query = `
+        UPDATE usuarios
+        SET nombre_completo = ?, email = ?, departamento = ?, rol = ?, activo = ?
+        WHERE id = ?
+    `;
+
+    req.db.run(query, [nombre_completo, email, departamento, rol, activo ? 1 : 0, id], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        res.json({ message: 'Usuario actualizado exitosamente' });
+    });
 });
 
 // ===== RUTA PRINCIPAL =====

@@ -1351,10 +1351,20 @@ class HerramientasApp {
             }
 
             const blob = await response.blob();
+            // Try to get filename from Content-Disposition header
+            const disposition = response.headers.get('Content-Disposition') || '';
+            let filename = 'report.xlsx';
+            const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+            if (match && match[1]) {
+                filename = match[1];
+            } else {
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                filename = `report-${ts}.xlsx`;
+            }
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'report.xlsx';
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             a.remove();

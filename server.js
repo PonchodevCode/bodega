@@ -388,8 +388,10 @@ app.get('/export/report.xlsx', auth.authenticate(), auth.authorize(['admin','sup
         devRows.forEach(r => wsDev.addRow(r));
 
         const buffer = await workbook.xlsx.writeBuffer();
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `report-${timestamp}.xlsx`;
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=report.xlsx');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(Buffer.from(buffer));
     } catch (err) {
         console.error('Error generando XLSX:', err);

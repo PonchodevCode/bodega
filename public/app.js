@@ -298,6 +298,11 @@ class HerramientasApp {
         document.getElementById('prestamo-herramienta')?.addEventListener('change', (e) => {
             this.actualizarCantidadMaxima();
         });
+        // Export report button (in Reportes page)
+        document.getElementById('export-report-btn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.exportReport();
+        });
     }
 
     setupResponsiveHandlers() {
@@ -1175,6 +1180,34 @@ class HerramientasApp {
         } catch (err) {
             console.error('openBackupModal error:', err);
             this.showAlert('Error abriendo modal backups: ' + err.message, 'error');
+        }
+    }
+
+    async exportReport() {
+        try {
+            const token = localStorage.getItem('authToken');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch('/export/report.xlsx', { method: 'GET', headers });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `Error ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'report.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            this.showAlert('Descarga iniciada: report.xlsx', 'success');
+        } catch (err) {
+            console.error('exportReport error:', err);
+            this.showAlert('Error al exportar: ' + err.message, 'error');
         }
     }
 

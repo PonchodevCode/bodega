@@ -288,6 +288,11 @@ class HerramientasApp {
             e.preventDefault();
             this.openBackupModal();
         });
+        // Abrir modal de creación de categoría desde Registro (botón superior)
+        document.getElementById('open-categoria-modal-top')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.openCreateCategoriaModal();
+        });
 
         // Search
         document.getElementById('buscar-herramienta')?.addEventListener('input', (e) => {
@@ -297,6 +302,11 @@ class HerramientasApp {
         // Modal changes
         document.getElementById('prestamo-herramienta')?.addEventListener('change', (e) => {
             this.actualizarCantidadMaxima();
+        });
+        // Export report button (in Reportes page)
+        document.getElementById('export-report-btn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.exportReport();
         });
     }
 
@@ -446,6 +456,8 @@ class HerramientasApp {
             this.renderUsuariosTable(usuarios);
             // Cargar solicitantes también para administración (admins y supervisors)
             await this.loadSolicitantesAdmin();
+            // Cargar categorías para administración
+            await this.loadCategoriasAdmin();
         } catch (error) {
             console.error('Error loading usuarios:', error);
         }
@@ -493,6 +505,94 @@ class HerramientasApp {
         } catch (error) {
             console.error('Error eliminando solicitante:', error);
             this.showAlert('Error al eliminar solicitante: ' + error.message, 'error');
+        }
+    }
+
+    async loadCategoriasAdmin() {
+        try {
+            const categorias = await this.apiCall('/api/categorias');
+            this.renderCategoriasTable(categorias);
+        } catch (err) {
+            console.error('Error cargando categorias:', err);
+        }
+    }
+
+    renderCategoriasTable(items) {
+        const tbody = document.querySelector('#categorias-table tbody');
+        if (!tbody) return;
+        tbody.innerHTML = items.map(c => `
+            <tr>
+                <td>${c.id}</td>
+                <td>${c.nombre}</td>
+                <td>
+                    ${ (this.usuario && (this.usuario.rol === 'admin' || this.usuario.rol === 'supervisor')) ? `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="app.openEditCategoriaModal(${c.id}, '${encodeURIComponent(c.nombre)}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="app.deleteCategoria(${c.id})">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : `<span class="small text-muted">No autorizado</span>` }
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    openEditCategoriaModal(id, encodedName) {
+        const nombre = decodeURIComponent(encodedName);
+        const modalHtml = `
+            <div class="modal fade" id="editCategoriaModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Editar Categoría</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre</label>
+                                <input class="form-control" id="edit-categoria-nombre" value="${nombre}">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button class="btn btn-primary" id="save-edit-categoria">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modalEl = document.getElementById('editCategoriaModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        document.getElementById('save-edit-categoria').addEventListener('click', async () => {
+            const newName = document.getElementById('edit-categoria-nombre').value.trim();
+            if (!newName) { alert('Nombre requerido'); return; }
+            try {
+                await this.apiCall(`/api/categorias/${id}`, 'PUT', { nombre: newName });
+                this.showAlert('Categoría actualizada', 'success');
+                modal.hide();
+                modalEl.remove();
+                await this.loadCategoriasAdmin();
+            } catch (err) {
+                console.error('Error actualizando categoría:', err);
+                this.showAlert('Error al actualizar categoría: ' + err.message, 'error');
+            }
+        }, { once: true });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    }
+
+    async deleteCategoria(id) {
+        if (!confirm('¿Eliminar categoría? Solo se puede eliminar si no tiene herramientas asociadas.')) return;
+        try {
+            await this.apiCall(`/api/categorias/${id}`, 'DELETE');
+            this.showAlert('Categoría eliminada', 'success');
+            await this.loadCategoriasAdmin();
+            await this.loadInventarioData();
+        } catch (err) {
+            console.error('Error eliminando categoría:', err);
+            this.showAlert('Error al eliminar categoría: ' + err.message, 'error');
         }
     }
 
@@ -1175,6 +1275,104 @@ class HerramientasApp {
         } catch (err) {
             console.error('openBackupModal error:', err);
             this.showAlert('Error abriendo modal backups: ' + err.message, 'error');
+        }
+    }
+
+    // Crear categoría desde modal
+    async openCreateCategoriaModal() {
+        const modalHtml = `
+            <div class="modal fade" id="createCategoriaModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Nueva Categoría</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="createCategoriaForm">
+                                <div class="mb-3">
+                                    <label for="new-categoria-nombre" class="form-label">Nombre</label>
+                                    <input type="text" class="form-control" id="new-categoria-nombre" required>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" id="guardar-categoria-btn">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modalEl = document.getElementById('createCategoriaModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        document.getElementById('guardar-categoria-btn').addEventListener('click', async () => {
+            const nombre = document.getElementById('new-categoria-nombre').value.trim();
+            if (!nombre) {
+                alert('Nombre requerido');
+                return;
+            }
+            try {
+                const resp = await this.apiCall('/api/categorias', 'POST', { nombre });
+                // recargar categorias y seleccionar la creada
+                await this.loadCategorias();
+                const select = document.getElementById('categoria');
+                if (select && resp.id) {
+                    select.value = resp.id;
+                }
+                this.showAlert('Categoría creada', 'success');
+                modal.hide();
+                modalEl.remove();
+            } catch (err) {
+                console.error('Error creando categoría:', err);
+                this.showAlert('Error al crear categoría: ' + err.message, 'error');
+            }
+        }, { once: true });
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            modalEl.remove();
+        }, { once: true });
+    }
+
+    async exportReport() {
+        try {
+            const token = localStorage.getItem('authToken');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch('/export/report.xlsx', { method: 'GET', headers });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `Error ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            // Try to get filename from Content-Disposition header
+            const disposition = response.headers.get('Content-Disposition') || '';
+            let filename = 'report.xlsx';
+            const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+            if (match && match[1]) {
+                filename = match[1];
+            } else {
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                filename = `report-${ts}.xlsx`;
+            }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            this.showAlert('Descarga iniciada: report.xlsx', 'success');
+        } catch (err) {
+            console.error('exportReport error:', err);
+            this.showAlert('Error al exportar: ' + err.message, 'error');
         }
     }
 

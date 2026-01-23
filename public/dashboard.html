@@ -645,6 +645,11 @@
                         <div class="page-header">
                             <h1 class="h2"><i class="fas fa-chart-bar me-2"></i>Reportes y Estadísticas</h1>
                             <p class="mb-0">Análisis detallado del inventario y movimientos</p>
+                        <div class="mt-3">
+                            <button id="export-report-btn" class="btn btn-primary btn-sm">
+                                <i class="fas fa-file-excel me-2"></i> Exportar a Excel
+                            </button>
+                        </div>
                         </div>
 
                         <div class="card">
@@ -712,6 +717,32 @@
                                         </thead>
                                         <tbody>
                                             <!-- Se llenará dinámicamente -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Categorías management --> 
+                        <div id="categorias-admin-container" class="card mt-4">
+                            <div class="card-body">
+                                <h5 class="card-title">Categorías</h5>
+                                <div class="mb-3">
+                                    <button class="btn btn-outline-primary" id="open-categoria-modal-top">
+                                        <i class="fas fa-plus me-2"></i> Nueva Categoría
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover" id="categorias-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Nombre</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Se llenará dinámicamente --> 
                                         </tbody>
                                     </table>
                                 </div>
@@ -804,9 +835,14 @@
                         </div>
                         <div class="mb-3">
                             <label for="categoria" class="form-label">Categoría</label>
-                            <select class="form-select" id="categoria" required>
-                                <!-- Se llenará dinámicamente -->
-                            </select>
+                            <div class="input-group">
+                                <select class="form-select" id="categoria" required>
+                                    <!-- Se llenará dinámicamente -->
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="open-categoria-modal" title="Agregar categoría" onclick="app.openCreateCategoriaModal()">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label for="stock" class="form-label">Stock Total</label>

@@ -308,6 +308,97 @@ app.get('/export/prestamos.csv', auth.authenticate(), auth.authorize(['admin','s
     });
 });
 
+// Exportar reporte completo a XLSX (3 hojas)
+const ExcelJS = require('exceljs');
+app.get('/export/report.xlsx', auth.authenticate(), auth.authorize(['admin','supervisor']), async (req, res) => {
+    try {
+        // Inventario
+        const invQuery = `
+            SELECT h.id, h.codigo, h.nombre, c.nombre as categoria, h.stock_total, h.en_bodega, h.prestadas, h.estado
+            FROM herramientas h
+            LEFT JOIN categorias c ON h.categoria_id = c.id
+            ORDER BY c.nombre, h.nombre
+        `;
+        const prestamosQuery = `
+            SELECT p.id, p.codigo_prestamo, p.herramienta_id, h.nombre as herramienta, p.solicitante_id, s.nombre as solicitante,
+                   p.cantidad, p.fecha_salida, p.fecha_retorno, p.estado
+            FROM prestamos p
+            JOIN herramientas h ON p.herramienta_id = h.id
+            JOIN solicitantes s ON p.solicitante_id = s.id
+            ORDER BY p.fecha_salida DESC
+        `;
+        const devolucionesQuery = `
+            SELECT d.id, d.codigo_devolucion, d.prestamo_id, d.herramienta_id, d.cantidad, d.fecha_devolucion, d.dias_uso, d.estado_herramienta, d.observaciones
+            FROM devoluciones d
+            ORDER BY d.fecha_devolucion DESC
+        `;
+
+        const invRows = await new Promise((resolve, reject) => {
+            req.db.all(invQuery, [], (err, rows) => err ? reject(err) : resolve(rows));
+        });
+        const prestRows = await new Promise((resolve, reject) => {
+            req.db.all(prestamosQuery, [], (err, rows) => err ? reject(err) : resolve(rows));
+        });
+        const devRows = await new Promise((resolve, reject) => {
+            req.db.all(devolucionesQuery, [], (err, rows) => err ? reject(err) : resolve(rows));
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Sistema Bodega';
+        workbook.created = new Date();
+
+        const wsInv = workbook.addWorksheet('Inventario');
+        wsInv.columns = [
+            { header: 'ID', key: 'id', width: 8 },
+            { header: 'Codigo', key: 'codigo', width: 15 },
+            { header: 'Nombre', key: 'nombre', width: 30 },
+            { header: 'Categoria', key: 'categoria', width: 20 },
+            { header: 'Stock Total', key: 'stock_total', width: 12 },
+            { header: 'En Bodega', key: 'en_bodega', width: 12 },
+            { header: 'Prestadas', key: 'prestadas', width: 10 },
+            { header: 'Estado', key: 'estado', width: 12 }
+        ];
+        invRows.forEach(r => wsInv.addRow(r));
+
+        const wsPrest = workbook.addWorksheet('Prestamos');
+        wsPrest.columns = [
+            { header: 'ID', key: 'id', width: 8 },
+            { header: 'Codigo', key: 'codigo_prestamo', width: 18 },
+            { header: 'Herramienta', key: 'herramienta', width: 30 },
+            { header: 'Solicitante', key: 'solicitante', width: 25 },
+            { header: 'Cantidad', key: 'cantidad', width: 10 },
+            { header: 'Fecha Salida', key: 'fecha_salida', width: 18 },
+            { header: 'Fecha Retorno', key: 'fecha_retorno', width: 18 },
+            { header: 'Estado', key: 'estado', width: 12 }
+        ];
+        prestRows.forEach(r => wsPrest.addRow(r));
+
+        const wsDev = workbook.addWorksheet('Devoluciones');
+        wsDev.columns = [
+            { header: 'ID', key: 'id', width: 8 },
+            { header: 'Codigo Devolucion', key: 'codigo_devolucion', width: 20 },
+            { header: 'Prestamo ID', key: 'prestamo_id', width: 12 },
+            { header: 'Herramienta ID', key: 'herramienta_id', width: 12 },
+            { header: 'Cantidad', key: 'cantidad', width: 10 },
+            { header: 'Fecha Devolucion', key: 'fecha_devolucion', width: 18 },
+            { header: 'Dias Uso', key: 'dias_uso', width: 10 },
+            { header: 'Estado Herramienta', key: 'estado_herramienta', width: 16 },
+            { header: 'Observaciones', key: 'observaciones', width: 40 }
+        ];
+        devRows.forEach(r => wsDev.addRow(r));
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `report-${timestamp}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(Buffer.from(buffer));
+    } catch (err) {
+        console.error('Error generando XLSX:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ===== BACKUP AUTOMÁTICO =====
 const fs = require('fs');
 const backupsDir = path.join(__dirname, 'backups');
@@ -411,6 +502,55 @@ app.get('/api/categorias', auth.authenticate(), (req, res) => {
             return;
         }
         res.json(rows);
+    });
+});
+
+// Crear nueva categoría (admin|supervisor)
+app.post('/api/categorias', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre de categoría requerido' });
+
+    const query = 'INSERT INTO categorias (nombre) VALUES (?)';
+    req.db.run(query, [nombre], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({ id: this.lastID, message: 'Categoría creada exitosamente' });
+    });
+});
+
+// Actualizar categoría (admin|supervisor)
+app.put('/api/categorias/:id', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { id } = req.params;
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+
+    const query = 'UPDATE categorias SET nombre = ? WHERE id = ?';
+    req.db.run(query, [nombre, id], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (this.changes === 0) return res.status(404).json({ error: 'Categoría no encontrada' });
+        res.json({ message: 'Categoría actualizada exitosamente' });
+    });
+});
+
+// Eliminar categoría (admin|supervisor) - solo si no hay herramientas asociadas
+app.delete('/api/categorias/:id', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { id } = req.params;
+    const checkQuery = 'SELECT COUNT(*) as count FROM herramientas WHERE categoria_id = ?';
+    req.db.get(checkQuery, [id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (row && row.count > 0) return res.status(400).json({ error: 'No se puede eliminar: categoría con herramientas asociadas' });
+
+        const delQuery = 'DELETE FROM categorias WHERE id = ?';
+        req.db.run(delQuery, [id], function(err2) {
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'Categoría no encontrada' });
+            res.json({ message: 'Categoría eliminada exitosamente' });
+        });
     });
 });
 

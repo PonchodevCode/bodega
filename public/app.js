@@ -1183,6 +1183,66 @@ class HerramientasApp {
         }
     }
 
+    // Crear categoría desde modal
+    async openCreateCategoriaModal() {
+        const modalHtml = `
+            <div class="modal fade" id="createCategoriaModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Nueva Categoría</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="createCategoriaForm">
+                                <div class="mb-3">
+                                    <label for="new-categoria-nombre" class="form-label">Nombre</label>
+                                    <input type="text" class="form-control" id="new-categoria-nombre" required>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" id="guardar-categoria-btn">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modalEl = document.getElementById('createCategoriaModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        document.getElementById('guardar-categoria-btn').addEventListener('click', async () => {
+            const nombre = document.getElementById('new-categoria-nombre').value.trim();
+            if (!nombre) {
+                alert('Nombre requerido');
+                return;
+            }
+            try {
+                const resp = await this.apiCall('/api/categorias', 'POST', { nombre });
+                // recargar categorias y seleccionar la creada
+                await this.loadCategorias();
+                const select = document.getElementById('categoria');
+                if (select && resp.id) {
+                    select.value = resp.id;
+                }
+                this.showAlert('Categoría creada', 'success');
+                modal.hide();
+                modalEl.remove();
+            } catch (err) {
+                console.error('Error creando categoría:', err);
+                this.showAlert('Error al crear categoría: ' + err.message, 'error');
+            }
+        }, { once: true });
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            modalEl.remove();
+        }, { once: true });
+    }
+
     async exportReport() {
         try {
             const token = localStorage.getItem('authToken');

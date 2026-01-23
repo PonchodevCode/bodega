@@ -503,6 +503,21 @@ app.get('/api/categorias', auth.authenticate(), (req, res) => {
     });
 });
 
+// Crear nueva categoría (admin|supervisor)
+app.post('/api/categorias', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre de categoría requerido' });
+
+    const query = 'INSERT INTO categorias (nombre) VALUES (?)';
+    req.db.run(query, [nombre], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({ id: this.lastID, message: 'Categoría creada exitosamente' });
+    });
+});
+
 // ===== RUTAS DE PRESTAMOS =====
 
 app.get('/api/prestamos', auth.authenticate(), (req, res) => {

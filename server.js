@@ -518,6 +518,40 @@ app.post('/api/categorias', auth.authenticate(), auth.authorize(['admin','superv
     });
 });
 
+// Actualizar categoría (admin|supervisor)
+app.put('/api/categorias/:id', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { id } = req.params;
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+
+    const query = 'UPDATE categorias SET nombre = ? WHERE id = ?';
+    req.db.run(query, [nombre, id], function(err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (this.changes === 0) return res.status(404).json({ error: 'Categoría no encontrada' });
+        res.json({ message: 'Categoría actualizada exitosamente' });
+    });
+});
+
+// Eliminar categoría (admin|supervisor) - solo si no hay herramientas asociadas
+app.delete('/api/categorias/:id', auth.authenticate(), auth.authorize(['admin','supervisor']), (req, res) => {
+    const { id } = req.params;
+    const checkQuery = 'SELECT COUNT(*) as count FROM herramientas WHERE categoria_id = ?';
+    req.db.get(checkQuery, [id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (row && row.count > 0) return res.status(400).json({ error: 'No se puede eliminar: categoría con herramientas asociadas' });
+
+        const delQuery = 'DELETE FROM categorias WHERE id = ?';
+        req.db.run(delQuery, [id], function(err2) {
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'Categoría no encontrada' });
+            res.json({ message: 'Categoría eliminada exitosamente' });
+        });
+    });
+});
+
 // ===== RUTAS DE PRESTAMOS =====
 
 app.get('/api/prestamos', auth.authenticate(), (req, res) => {

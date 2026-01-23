@@ -451,6 +451,8 @@ class HerramientasApp {
             this.renderUsuariosTable(usuarios);
             // Cargar solicitantes también para administración (admins y supervisors)
             await this.loadSolicitantesAdmin();
+            // Cargar categorías para administración
+            await this.loadCategoriasAdmin();
         } catch (error) {
             console.error('Error loading usuarios:', error);
         }
@@ -498,6 +500,94 @@ class HerramientasApp {
         } catch (error) {
             console.error('Error eliminando solicitante:', error);
             this.showAlert('Error al eliminar solicitante: ' + error.message, 'error');
+        }
+    }
+
+    async loadCategoriasAdmin() {
+        try {
+            const categorias = await this.apiCall('/api/categorias');
+            this.renderCategoriasTable(categorias);
+        } catch (err) {
+            console.error('Error cargando categorias:', err);
+        }
+    }
+
+    renderCategoriasTable(items) {
+        const tbody = document.querySelector('#categorias-table tbody');
+        if (!tbody) return;
+        tbody.innerHTML = items.map(c => `
+            <tr>
+                <td>${c.id}</td>
+                <td>${c.nombre}</td>
+                <td>
+                    ${ (this.usuario && (this.usuario.rol === 'admin' || this.usuario.rol === 'supervisor')) ? `
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="app.openEditCategoriaModal(${c.id}, '${encodeURIComponent(c.nombre)}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="app.deleteCategoria(${c.id})">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : `<span class="small text-muted">No autorizado</span>` }
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    openEditCategoriaModal(id, encodedName) {
+        const nombre = decodeURIComponent(encodedName);
+        const modalHtml = `
+            <div class="modal fade" id="editCategoriaModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Editar Categoría</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre</label>
+                                <input class="form-control" id="edit-categoria-nombre" value="${nombre}">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button class="btn btn-primary" id="save-edit-categoria">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modalEl = document.getElementById('editCategoriaModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        document.getElementById('save-edit-categoria').addEventListener('click', async () => {
+            const newName = document.getElementById('edit-categoria-nombre').value.trim();
+            if (!newName) { alert('Nombre requerido'); return; }
+            try {
+                await this.apiCall(`/api/categorias/${id}`, 'PUT', { nombre: newName });
+                this.showAlert('Categoría actualizada', 'success');
+                modal.hide();
+                modalEl.remove();
+                await this.loadCategoriasAdmin();
+            } catch (err) {
+                console.error('Error actualizando categoría:', err);
+                this.showAlert('Error al actualizar categoría: ' + err.message, 'error');
+            }
+        }, { once: true });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove(), { once: true });
+    }
+
+    async deleteCategoria(id) {
+        if (!confirm('¿Eliminar categoría? Solo se puede eliminar si no tiene herramientas asociadas.')) return;
+        try {
+            await this.apiCall(`/api/categorias/${id}`, 'DELETE');
+            this.showAlert('Categoría eliminada', 'success');
+            await this.loadCategoriasAdmin();
+            await this.loadInventarioData();
+        } catch (err) {
+            console.error('Error eliminando categoría:', err);
+            this.showAlert('Error al eliminar categoría: ' + err.message, 'error');
         }
     }
 

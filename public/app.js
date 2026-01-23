@@ -288,6 +288,11 @@ class HerramientasApp {
             e.preventDefault();
             this.openBackupModal();
         });
+        // Abrir modal de creación de categoría desde Registro (botón superior)
+        document.getElementById('open-categoria-modal-top')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.openCreateCategoriaModal();
+        });
 
         // Search
         document.getElementById('buscar-herramienta')?.addEventListener('input', (e) => {

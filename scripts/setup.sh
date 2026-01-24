@@ -75,7 +75,6 @@ start_server() {
 full_flow() {
   install_deps
   fix_permissions
-  init_db
   validate_db
   start_server
 }
@@ -83,23 +82,21 @@ full_flow() {
 show_menu() {
   print_header
   echo "Opciones:"
-  echo " 1) Full: instalar deps, corregir permisos, init DB, validar y arrancar servidor"
+  echo " 1) Full: instalar deps, corregir permisos, validar y arrancar servidor"
   echo " 2) Instalar dependencias (npm install)"
   echo " 3) Corregir permisos (backups, database)"
-  echo " 4) Inicializar base de datos (npm run init-db)"
-  echo " 5) Validar conexión a DB"
-  echo " 6) Iniciar servidor (npm run dev)"
-  echo " 7) Salir"
+  echo " 4) Validar conexión a DB"
+  echo " 5) Iniciar servidor (npm run dev)"
+  echo " 6) Salir"
   echo
-  read -rp "Elige una opción [1-7]: " CHOICE
+  read -rp "Elige una opción [1-6]: " CHOICE
   case "$CHOICE" in
     1) full_flow ;;
     2) install_deps ;;
     3) fix_permissions ;;
-    4) init_db ;;
-    5) validate_db ;;
-    6) start_server ;;
-    7) echo "Saliendo."; exit 0 ;;
+    4) validate_db ;;
+    5) start_server ;;
+    6) echo "Saliendo."; exit 0 ;;
     *) echo "Opción inválida."; exit 1 ;;
   esac
 }

@@ -24,12 +24,7 @@ if (Get-Command npm -ErrorAction SilentlyContinue) {
 }
 
 $init = Read-Host "¿Deseas inicializar la base de datos (npm run init-db)? [y/N]"
-if ($init -match '^(y|si|s)$') {
-  Write-Output "Inicializando base de datos..."
-  npm run init-db
-} else {
-  Write-Output "Omitiendo inicialización de DB."
-}
+Write-Output "Nota: La inicialización de la base de datos se omite en este asistente. Usa 'npm run init-db' manualmente si es necesario."
 
 Write-Output "2) Crear carpeta backups si no existe..."
 $backups = Join-Path $Root 'backups'
